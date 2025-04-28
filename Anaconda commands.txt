@@ -1,0 +1,23 @@
+DEPENDICES
+pip3 install torch torchvision
+
+SNAKE AI GAME
+conda activate pygame_env
+cd "C:\Users\PC\OneDrive\Documents\Random\Coding\Python\AI_Snake_game"
+python "C:\Users\PC\OneDrive\Documents\Random\Coding\Python\AI_Snake_game\agent.py"
+
+I will provide you with both a client-side and a server-side script for a chat application. Your task is to modify these scripts to support image transfer between clients and ensure that images are embedded directly in the chat when sent.
+Requirements:
+
+    Image Sending & Receiving
+        Allow users to send image files through the chat interface.
+        Ensure the server properly handles and relays images to the intended recipients.
+        Modify the client-side script to display images inline when received, rather than as downloadable links.
+
+    Encoding & Transmission
+        Decide on an efficient way to send images (e.g., base64 encoding, direct file transfers, or WebSockets).
+        Ensure compatibility between client and server for seamless image transmission.
+
+    User Experience Enhancements
+        If necessary, modify the UI to display images properly.
+        Ensure that text and images can coexist in the chat without breaking formatting.
