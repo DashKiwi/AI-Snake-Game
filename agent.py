@@ -10,6 +10,8 @@ MAX_MEMORY = 100_000
 BATCH_SIZE = 500
 LR = 0.001
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 class Agent:
 
     def __init__(self):
@@ -17,7 +19,7 @@ class Agent:
         self.epsilon = 0  # randomness
         self.gamma = 0.9  # discount rate
         self.memory = deque(maxlen=MAX_MEMORY)  # popleft()
-        self.model = Linear_QNet(11, 256, 3)
+        self.model = Linear_QNet(11, 256, 3).to(device)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
 
     def get_state(self, game):
@@ -88,7 +90,7 @@ class Agent:
             move = random.randint(0, 2)
             final_move[move] = 1
         else:
-            state0 = torch.tensor(state, dtype=torch.float)
+            state0 = torch.tensor(state, dtype=torch.float).to(device)
             prediction = self.model(state0)
             move = torch.argmax(prediction).item()
             final_move[move] = 1
@@ -107,7 +109,7 @@ class VectorizedAgent:
         self.agent.n_games = metadata.get('n_games', 0)
         self.record = metadata.get('record', 0)
 
-    def train(self, visual=True, plot=True):
+    def train(self, visual=True, plotting=True):
         plot_scores = []
         plot_mean_scores = []
         total_score = 0
@@ -137,7 +139,7 @@ class VectorizedAgent:
                         self.agent.model.save(optimizer=self.agent.trainer.optimizer, metadata=metadata)
                     print('Game', self.agent.n_games, 'Score', score, 'Record:', self.record)
                     
-                    if plot == True:
+                    if plotting == True:
                         plot_scores.append(score)
                         total_score += score
                         mean_score = total_score / self.agent.n_games

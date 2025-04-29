@@ -13,9 +13,9 @@ def train():
         try:
             visual_choice = input("Do you want a visual interface of one snake? (Y/N) ").upper()
             if visual_choice == "Y":
-                visual_choice == True
+                visual_choice = True
             elif visual_choice == "N":
-                visual_choice == False
+                visual_choice = False
             else:
                 raise
             break
@@ -25,9 +25,9 @@ def train():
         try:
             plot_choice = input("Do you want to see plotting of the scores? (Y/N) ").upper()
             if plot_choice == "Y":
-                plot_choice == True
+                plot_choice = True
             elif plot_choice == "N":
-                plot_choice == False
+                plot_choice = False
             else:
                 raise
             break
@@ -35,7 +35,7 @@ def train():
             print("Please choose Yes (Y) or No (N)")
     os.system('cls||clear')
     agent = VectorizedAgent(num_envs=n_envs)
-    agent.train(visual=visual_choice, plot=plot_choice)
+    agent.train(visual=visual_choice, plotting=plot_choice)
 
 if __name__ == '__main__':
     train()

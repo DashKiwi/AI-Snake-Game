@@ -4,6 +4,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 import os
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 class Linear_QNet(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super().__init__()
@@ -33,20 +35,24 @@ class Linear_QNet(nn.Module):
     def load(self, file_name='model.pth', optimizer=None):
         model_folder_path = './model'
         file_path = os.path.join(model_folder_path, file_name)
+        
         if os.path.exists(file_path):
-            checkpoint = torch.load(file_path)
+            checkpoint = torch.load(file_path, map_location=device)  # <-- Key change
             if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
                 self.load_state_dict(checkpoint['model_state_dict'])
+                self.to(device)
                 if optimizer and checkpoint.get('optimizer_state_dict'):
                     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
                 return checkpoint.get('metadata', {})
             else:
                 self.load_state_dict(checkpoint)
+                self.to(device)
                 return {}
-
         else:
             print(f"Model file not found at {file_path}")
             return {}
+
 
 class QTrainer:
     def __init__(self, model, lr, gamma):
@@ -57,10 +63,10 @@ class QTrainer:
         self.criterion = nn.MSELoss()
 
     def train_step(self, state, action, reward, next_state, done):
-        state = torch.tensor(state, dtype=torch.float)
-        next_state = torch.tensor(next_state, dtype=torch.float)
-        action = torch.tensor(action, dtype=torch.long)
-        reward = torch.tensor(reward, dtype=torch.float)
+        state = torch.tensor(state, dtype=torch.float).to(device)
+        next_state = torch.tensor(next_state, dtype=torch.float).to(device)
+        action = torch.tensor(action, dtype=torch.long).to(device)
+        reward = torch.tensor(reward, dtype=torch.float).to(device)
         # (n, x)
 
         if len(state.shape) == 1:
