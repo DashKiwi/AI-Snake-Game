@@ -15,14 +15,38 @@ class Linear_QNet(nn.Module):
         x = self.linear2(x)
         return x
 
-    def save(self, file_name='model.pth'):
+    def save(self, file_name='model.pth', optimizer=None, metadata=None):
         model_folder_path = './model'
         if not os.path.exists(model_folder_path):
             os.makedirs(model_folder_path)
 
         file_name = os.path.join(model_folder_path, file_name)
-        torch.save(self.state_dict(), file_name)
+        
+        checkpoint = {
+            'model_state_dict': self.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict() if optimizer else None,
+            'metadata': metadata
+        }
 
+        torch.save(checkpoint, file_name)
+
+    def load(self, file_name='model.pth', optimizer=None):
+        model_folder_path = './model'
+        file_path = os.path.join(model_folder_path, file_name)
+        if os.path.exists(file_path):
+            checkpoint = torch.load(file_path)
+            if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                self.load_state_dict(checkpoint['model_state_dict'])
+                if optimizer and checkpoint.get('optimizer_state_dict'):
+                    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                return checkpoint.get('metadata', {})
+            else:
+                self.load_state_dict(checkpoint)
+                return {}
+
+        else:
+            print(f"Model file not found at {file_path}")
+            return {}
 
 class QTrainer:
     def __init__(self, model, lr, gamma):

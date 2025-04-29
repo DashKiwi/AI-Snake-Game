@@ -25,13 +25,14 @@ BLACK = (0,0,0)
 
 BLOCK_SIZE = 20
 # Original speed was 40
-SPEED = 99999
+SPEED = float('inf')
 
 class SnakeGameAI:
 
     def __init__(self, w=640, h=480):
         self.w = w
         self.h = h
+        self.visited = set()
         # init display
         self.display = pygame.display.set_mode((self.w, self.h))
         pygame.display.set_caption('Snake')
@@ -42,7 +43,7 @@ class SnakeGameAI:
     def reset(self):
         # init game state
         self.direction = Direction.RIGHT
-
+        self.visited = set()
         self.head = Point(self.w/2, self.h/2)
         self.snake = [self.head,
                       Point(self.head.x-BLOCK_SIZE, self.head.y),
@@ -64,38 +65,61 @@ class SnakeGameAI:
 
     def play_step(self, action):
         self.frame_iteration += 1
-        # 1. collect user input
+        reward = -1  # Default step penalty
+        game_over = False
+
+        # Handle quit
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
-        
-        # 2. move
-        self._move(action) # update the head
+
+        # Move
+        self._move(action)
         self.snake.insert(0, self.head)
-        
-        # 3. check if game over
-        reward = 0
-        game_over = False
-        if self.is_collision() or self.frame_iteration > 100*len(self.snake):
+
+        # Track tile visits for exploration bonus
+        if not hasattr(self, 'visited'):
+            self.visited = set()
+        if self.head not in self.visited:
+            self.visited.add(self.head)
+            reward += 0.5  # exploration bonus
+
+        # Check for collision
+        if self.is_collision() or self.frame_iteration > 100 * len(self.snake):
             game_over = True
-            reward = -10
+            reward = -20
             return reward, game_over, self.score
 
-        # 4. place new food or just move
+        # Proximity reward/penalty
+        current_distance = abs(self.head.x - self.food.x) + abs(self.head.y - self.food.y)
+        if hasattr(self, 'last_distance_to_food'):
+            if current_distance < self.last_distance_to_food:
+                reward += 0.2
+            else:
+                reward -= 0.2
+        self.last_distance_to_food = current_distance
+
+        # Food collected
         if self.head == self.food:
             self.score += 1
-            reward = 10
+            reward += 10
             self._place_food()
+            self.frame_iteration = 0  # reset after food
+            self.visited = set()      # reset visited tiles for new round
+            self.last_distance_to_food = abs(self.head.x - self.food.x) + abs(self.head.y - self.food.y)
         else:
             self.snake.pop()
-        
-        # 5. update ui and clock
+
+        # Looping penalty (low tile exploration over time)
+        if self.frame_iteration > 20 and len(self.visited) < 0.3 * self.frame_iteration:
+            reward -= 5  # likely looping in a small space
+
+        # Update UI and tick clock
         self._update_ui()
         self.clock.tick(SPEED)
-        # 6. return game over and score
-        return reward, game_over, self.score
 
+        return reward, game_over, self.score
 
     def is_collision(self, pt=None):
         if pt is None:

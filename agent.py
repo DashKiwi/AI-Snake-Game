@@ -107,6 +107,11 @@ def train():
     record = 0
     agent = Agent()
     game = SnakeGameAI()
+    # When loading:
+    metadata = agent.model.load(optimizer=agent.trainer.optimizer)
+    agent.epsilon = metadata.get('epsilon', agent.epsilon)
+    record = metadata.get('record', 0)
+    agent.n_games = metadata.get('n_games', 0)
     while True:
         # get old state
         state_old = agent.get_state(game)
@@ -132,8 +137,12 @@ def train():
 
             if score > record:
                 record = score
-                agent.model.save()
-
+                metadata = {
+                    'epsilon': agent.epsilon,
+                    'record': record,
+                    'n_games': agent.n_games
+                }
+                agent.model.save(optimizer=agent.trainer.optimizer, metadata=metadata)
             print('Game', agent.n_games, 'Score', score, 'Record:', record)
 
             plot_scores.append(score)
