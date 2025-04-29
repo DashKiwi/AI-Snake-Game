@@ -2,9 +2,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import numpy as np
 import os
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 
 class Linear_QNet(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
@@ -37,7 +39,7 @@ class Linear_QNet(nn.Module):
         file_path = os.path.join(model_folder_path, file_name)
         
         if os.path.exists(file_path):
-            checkpoint = torch.load(file_path, map_location=device)  # <-- Key change
+            checkpoint = torch.load(file_path, map_location=device)
             if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
                 self.load_state_dict(checkpoint['model_state_dict'])
                 self.to(device)
@@ -56,43 +58,39 @@ class Linear_QNet(nn.Module):
 
 class QTrainer:
     def __init__(self, model, lr, gamma):
+        self.model = model
         self.lr = lr
         self.gamma = gamma
-        self.model = model
-        self.optimizer = optim.Adam(model.parameters(), lr=self.lr)
-        self.criterion = nn.MSELoss()
+        self.optimizer = torch.optim.Adam(model.parameters(), lr=self.lr)
+        self.criterion = torch.nn.MSELoss()
 
     def train_step(self, state, action, reward, next_state, done):
-        state = torch.tensor(state, dtype=torch.float).to(device)
-        next_state = torch.tensor(next_state, dtype=torch.float).to(device)
-        action = torch.tensor(action, dtype=torch.long).to(device)
-        reward = torch.tensor(reward, dtype=torch.float).to(device)
-        # (n, x)
+        # Convert inputs to tensors and move to device
+        state = torch.tensor(state, dtype=torch.float, device=device)
+        next_state = torch.tensor(next_state, dtype=torch.float, device=device)
+        action = torch.tensor(action, dtype=torch.long, device=device)
+        reward = torch.tensor(reward, dtype=torch.float, device=device)
+        done = torch.tensor(done, dtype=torch.bool, device=device)
 
+        # If inputs are not batched, add a batch dimension
         if len(state.shape) == 1:
-            # (1, x)
-            state = torch.unsqueeze(state, 0)
-            next_state = torch.unsqueeze(next_state, 0)
-            action = torch.unsqueeze(action, 0)
-            reward = torch.unsqueeze(reward, 0)
-            done = (done, )
+            state = state.unsqueeze(0)
+            next_state = next_state.unsqueeze(0)
+            action = action.unsqueeze(0)
+            reward = reward.unsqueeze(0)
+            done = done.unsqueeze(0)
 
-        # 1: predicted Q values with current state
+        # Predict Q values
         pred = self.model(state)
-
         target = pred.clone()
+
         for idx in range(len(done)):
             Q_new = reward[idx]
             if not done[idx]:
                 Q_new = reward[idx] + self.gamma * torch.max(self.model(next_state[idx]))
-
             target[idx][torch.argmax(action[idx]).item()] = Q_new
-    
-        # 2: Q_new = r + y * max(next_predicted Q value) -> only do this if not done
-        # pred.clone()
-        # preds[argmax(action)] = Q_new
-        self.optimizer.zero_grad()
-        loss = self.criterion(target, pred)
-        loss.backward()
 
+        self.optimizer.zero_grad()
+        loss = self.criterion(pred, target)
+        loss.backward()
         self.optimizer.step()

@@ -7,13 +7,13 @@ from model import Linear_QNet, QTrainer
 from helper import plot
 
 MAX_MEMORY = 100_000
-BATCH_SIZE = 500
+BATCH_SIZE = 1024
 LR = 0.001
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 
 class Agent:
-
     def __init__(self):
         self.n_games = 0
         self.epsilon = 0  # randomness
