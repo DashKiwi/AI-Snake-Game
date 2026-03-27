@@ -12,7 +12,6 @@ class Direction(Enum):
 
 Point = namedtuple('Point', 'x, y')
 
-# rgb colors
 WHITE = (255, 255, 255)
 RED = (200,0,0)
 COLOR1 = (0, 255, 0)
@@ -20,8 +19,8 @@ COLOR2 = (153, 255, 18)
 BLACK = (0,0,0)
 
 BLOCK_SIZE = 20
-# Original speed was 40
-SPEED = 0
+SPEED = 30
+
 
 class SnakeGameLogic:
     def __init__(self, w=640, h=480):
@@ -51,39 +50,24 @@ class SnakeGameLogic:
 
     def play_step(self, action):
         self.frame_iteration += 1
-        reward = -1
+        reward = -0.2
         game_over = False
 
         self._move(action)
         self.snake.insert(0, self.head)
-
-        if self.head not in self.visited:
-            self.visited.add(self.head)
-            reward += 0.5
 
         if self.is_collision() or self.frame_iteration > 100 * len(self.snake):
             game_over = True
             reward = -20
             return reward, game_over, self.score
 
-        current_distance = abs(self.head.x - self.food.x) + abs(self.head.y - self.food.y)
-        if current_distance < self.last_distance_to_food:
-            reward += 0.2
-        else:
-            reward -= 0.2
-        self.last_distance_to_food = current_distance
-
         if self.head == self.food:
             self.score += 1
-            reward += 10
+            reward = 20
             self._place_food()
             self.frame_iteration = 0
-            self.visited = set()
         else:
             self.snake.pop()
-
-        if self.frame_iteration > 20 and len(self.visited) < 0.3 * self.frame_iteration:
-            reward -= 5
 
         return reward, game_over, self.score
 
@@ -122,15 +106,15 @@ class SnakeGameLogic:
 
         self.head = Point(x, y)
 
+
 class SnakeGameVisual(SnakeGameLogic):
-    def __init__(self, w=640, h=480):
+    def __init__(self, w=640, h=480, speed=SPEED):
         pygame.init()
-        font = pygame.font.Font('arial.ttf', 25)
-        #font = pygame.font.SysFont('arial', 25)s
         self.display = pygame.display.set_mode((w, h))
         pygame.display.set_caption('Snake')
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font('arial.ttf', 25)
+        self.speed = speed
         super().__init__(w, h)
 
     def play_step(self, action):
@@ -141,7 +125,7 @@ class SnakeGameVisual(SnakeGameLogic):
 
         reward, game_over, score = super().play_step(action)
         self._update_ui()
-        self.clock.tick(SPEED)  # Adjust visual FPS
+        self.clock.tick(self.speed)
         return reward, game_over, score
 
     def _update_ui(self):

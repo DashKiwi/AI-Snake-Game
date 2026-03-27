@@ -3,6 +3,7 @@ from agent import VectorizedAgent
 
 def train():
     os.system('cls||clear')
+    print('Tip: For fastest training, set visual interface to N.')
     while True:
         try:
             n_envs = int(input("Snakes to run in the background: "))

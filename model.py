@@ -5,8 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 import os
 
-#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Linear_QNet(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
