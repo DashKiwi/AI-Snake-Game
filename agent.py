@@ -9,6 +9,7 @@ from mp_helper import run_parallel_episodes
 
 import multiprocessing as mp
 import threading
+import queue
 
 MAX_MEMORY = 100_000
 BATCH_SIZE = 1024
@@ -25,6 +26,7 @@ class Agent:
         self.memory = deque(maxlen=MAX_MEMORY)
         self.model = Linear_QNet(11, 256, 3).to(device)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
+        self.model_lock = threading.Lock()
 
     def get_state(self, game):
         head = game.snake[0]
@@ -74,10 +76,12 @@ class Agent:
             mini_sample = self.memory
 
         states, actions, rewards, next_states, dones = zip(*mini_sample)
-        self.trainer.train_step(states, actions, rewards, next_states, dones)
+        with self.model_lock:
+            self.trainer.train_step(states, actions, rewards, next_states, dones)
 
     def train_short_memory(self, state, action, reward, next_state, done):
-        self.trainer.train_step(state, action, reward, next_state, done)
+        with self.model_lock:
+            self.trainer.train_step(state, action, reward, next_state, done)
 
     def get_action(self, state):
         self.epsilon = 80 - self.n_games
@@ -87,14 +91,22 @@ class Agent:
             final_move[move] = 1
         else:
             state0 = torch.tensor(state, dtype=torch.float).to(device)
-            prediction = self.model(state0)
+            with self.model_lock:
+                prediction = self.model(state0)
             move = torch.argmax(prediction).item()
             final_move[move] = 1
         return final_move
 
     def get_weights(self):
-        """Return model weights as plain numpy arrays (picklable)."""
-        return {k: v.cpu().numpy() for k, v in self.model.state_dict().items()}
+        with self.model_lock:
+            return {k: v.cpu().numpy() for k, v in self.model.state_dict().items()}
+
+    def _metadata(self, record):
+        return {
+            'epsilon': self.epsilon,
+            'record': record,
+            'n_games': self.n_games
+        }
 
 
 class VectorizedAgent:
@@ -110,75 +122,90 @@ class VectorizedAgent:
         self.record = metadata.get('record', 0)
 
     def train(self, visual=True, plotting=True):
-        plot_scores = []
-        plot_mean_scores = []
-
         n_workers = max(1, mp.cpu_count() - 1)
         print(f"Using {n_workers} parallel worker processes for {self.num_envs} environments.")
 
+        plot_queue = queue.Queue() if plotting else None
+        stop_event = threading.Event()
+
+        train_thread = threading.Thread(
+            target=self._training_loop,
+            args=(n_workers, plot_queue, stop_event),
+            daemon=True
+        )
+        train_thread.start()
+
         if visual:
             visual_game = SnakeGameVisual()
-            stop_event = threading.Event()
-
-            train_thread = threading.Thread(
-                target=self._training_loop,
-                args=(n_workers, plot_scores, plot_mean_scores, plotting, stop_event),
-                daemon=True
-            )
-            train_thread.start()
-
             while not stop_event.is_set():
-                state = self.agent.get_state(visual_game)
-                action = self.agent.get_action(state)
-                _, done, _ = visual_game.play_step(action)
+                visual_game.n_games = self.agent.n_games
+
+                state_old = self.agent.get_state(visual_game)
+                action = self.agent.get_action(state_old)
+                reward, done, score = visual_game.play_step(action)
+                state_new = self.agent.get_state(visual_game)
+
+                self.agent.train_short_memory(state_old, action, reward, state_new, done)
+                self.agent.remember(state_old, action, reward, state_new, done)
+
                 if done:
                     visual_game.reset()
-        else:
-            stop_event = threading.Event()
-            self._training_loop(n_workers, plot_scores, plot_mean_scores, plotting, stop_event)
 
-    def _training_loop(self, n_workers, plot_scores, plot_mean_scores, plotting, stop_event):
+                if plotting:
+                    try:
+                        while True:
+                            scores, mean_scores = plot_queue.get_nowait()
+                            plot(scores, mean_scores)
+                    except queue.Empty:
+                        pass
+        else:
+            while not stop_event.is_set():
+                if plotting and plot_queue:
+                    try:
+                        scores, mean_scores = plot_queue.get(timeout=0.5)
+                        plot(scores, mean_scores)
+                    except queue.Empty:
+                        pass
+
+    def _training_loop(self, n_workers, plot_queue, stop_event):
+        plot_scores = []
+        plot_mean_scores = []
         total_score = 0
         try:
             while True:
                 weights = self.agent.get_weights()
-                epsilon = self.agent.epsilon
-                n_games = self.agent.n_games
-
                 all_experiences, all_scores = run_parallel_episodes(
                     num_envs=self.num_envs,
                     n_workers=n_workers,
                     weights=weights,
-                    epsilon=epsilon,
-                    n_games=n_games,
+                    epsilon=self.agent.epsilon,
+                    n_games=self.agent.n_games,
                     mp_context=self.mp_context
                 )
 
-                for experiences, score in zip(all_experiences, all_scores):
-                    for (state_old, final_move, reward, state_new, done) in experiences:
-                        self.agent.remember(state_old, final_move, reward, state_new, done)
-                        self.agent.train_short_memory(state_old, final_move, reward, state_new, done)
+                for experiences in all_experiences:
+                    for step in experiences:
+                        self.agent.remember(*step)
 
+                for score in all_scores:
                     self.agent.n_games += 1
                     self.agent.train_long_memory()
 
                     if score > self.record:
                         self.record = score
-                        metadata = {
-                            'epsilon': self.agent.epsilon,
-                            'record': self.record,
-                            'n_games': self.agent.n_games
-                        }
-                        self.agent.model.save(optimizer=self.agent.trainer.optimizer, metadata=metadata)
+                        self.agent.model.save(
+                            optimizer=self.agent.trainer.optimizer,
+                            metadata=self.agent._metadata(self.record)
+                        )
+                        print(f'Game {self.agent.n_games}  Score {score}  Record: {self.record}  [saved - new record]')
+                    else:
+                        print(f'Game {self.agent.n_games}  Score {score}  Record: {self.record}')
 
-                    print(f'Game {self.agent.n_games}  Score {score}  Record: {self.record}')
-
-                    if plotting:
+                    if plot_queue is not None:
                         plot_scores.append(score)
                         total_score += score
-                        mean_score = total_score / self.agent.n_games
-                        plot_mean_scores.append(mean_score)
-                        plot(plot_scores, plot_mean_scores)
+                        plot_mean_scores.append(total_score / self.agent.n_games)
+                        plot_queue.put((list(plot_scores), list(plot_mean_scores)))
 
         except Exception as e:
             print(f"Training thread error: {e}")

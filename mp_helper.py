@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import random
-from collections import namedtuple
+
 
 def _worker_run_episodes(args):
     from game import SnakeGameLogic, Direction, Point
@@ -68,6 +68,7 @@ def _worker_run_episodes(args):
     results = []
     for _ in range(num_episodes):
         game = SnakeGameLogic()
+        game.n_games = n_games
         done = False
         experiences = []
 
