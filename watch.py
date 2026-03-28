@@ -75,14 +75,16 @@ def watch(speed=15):
 
     running = True
     while running:
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_UP]:
-            game.speed = min(game.speed + 1, 120)
-        if keys[pygame.K_DOWN]:
-            game.speed = max(game.speed - 1, 1)
-        if keys[pygame.K_q]:
-            running = False
-            break
+        events = pygame.event.get()
+        for event in events:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    game.speed = min(game.speed + 5, 120)
+                if event.key == pygame.K_DOWN:
+                    game.speed = max(game.speed - 5, 1)
+                if event.key == pygame.K_q:
+                    running = False
+                    break
 
         state = get_state(game)
         action = get_action(model, state)
