@@ -59,7 +59,7 @@ class SnakeGameLogic:
         if self.is_collision() or self.frame_iteration > 100 * len(self.snake):
             game_over = True
             self.snake.pop()
-            length_penalty = -10 - (len(self.snake) * 0.5)
+            length_penalty = -10
             return length_penalty, game_over, self.score
 
         if self.head == self.food:
