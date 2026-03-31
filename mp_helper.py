@@ -102,11 +102,10 @@ def _worker_run_episodes(args):
         while not done:
             state_old = get_state(game)
             action = get_action(state_old)
-            reward, done, score = game.play_step(action)
+            reward, done, score, reason = game.play_step(action)
             state_new = get_state(game)
             experiences.append((state_old, action, reward, state_new, done))
-
-        results.append((experiences, score))
+        results.append((experiences, score, reason))
 
     return results
 
@@ -126,9 +125,10 @@ def run_parallel_episodes(num_envs, n_workers, weights, epsilon, n_games, mp_con
 
     all_experiences = []
     all_scores = []
+    all_reasons = []
     for batch in worker_results:
-        for experiences, score in batch:
+        for experiences, score, reason in batch:
             all_experiences.append(experiences)
             all_scores.append(score)
-
-    return all_experiences, all_scores
+            all_reasons.append(reason)
+    return all_experiences, all_scores, all_reasons

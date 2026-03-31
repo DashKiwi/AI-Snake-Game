@@ -142,6 +142,7 @@ class VectorizedAgent:
         self.num_envs = num_envs
         self.agent = Agent()
         self.record = 0
+        self.reason = ""
         self.mp_context = mp.get_context('spawn')
 
         metadata = self.agent.model.load(optimizer=self.agent.trainer.optimizer)
@@ -170,13 +171,14 @@ class VectorizedAgent:
 
                 state_old = self.agent.get_state(visual_game)
                 action = self.agent.get_action(state_old)
-                reward, done, score = visual_game.play_step(action)
+                reward, done, score, self.reason = visual_game.play_step(action)
                 state_new = self.agent.get_state(visual_game)
 
                 self.agent.train_short_memory(state_old, action, reward, state_new, done)
                 self.agent.remember(state_old, action, reward, state_new, done)
 
                 if done:
+                    print(f'[SNAKE VISUAL] Score: {score}  Reason: {self.reason}')
                     visual_game.reset()
 
                 if plotting:
@@ -202,7 +204,7 @@ class VectorizedAgent:
         try:
             while True:
                 weights = self.agent.get_weights()
-                all_experiences, all_scores = run_parallel_episodes(
+                all_experiences, all_scores, all_reasons = run_parallel_episodes(
                     num_envs=self.num_envs,
                     n_workers=n_workers,
                     weights=weights,
@@ -215,7 +217,7 @@ class VectorizedAgent:
                     for step in experiences:
                         self.agent.remember(*step)
 
-                for i, score in enumerate(all_scores):
+                for i, (score, reason) in enumerate(zip(all_scores, all_reasons)):
                     self.agent.n_games += 1
 
                     if self.agent.n_games % 4 == 0:
@@ -227,9 +229,9 @@ class VectorizedAgent:
                             optimizer=self.agent.trainer.optimizer,
                             metadata=self.agent._metadata(self.record)
                         )
-                        print(f'Game {self.agent.n_games}  Score {score}  Record: {self.record}  [saved - new record]')
+                        print(f'Game {self.agent.n_games}  Score {score}  Record: {self.record}  Reason: {reason} [saved - new record]')
                     else:
-                        print(f'Game {self.agent.n_games}  Score {score}  Record: {self.record}')
+                        print(f'Game {self.agent.n_games}  Score {score}  Record: {self.record} Reason: {reason}')
 
                     if plot_queue is not None:
                         plot_scores.append(score)

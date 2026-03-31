@@ -115,13 +115,13 @@ def watch(speed=15):
 
         state = get_state(game)
         action = get_action(model, state)
-        _, done, score = game.play_step(action)
+        _, done, score, reason = game.play_step(action)
 
         if done:
             games_played += 1
             scores.append(score)
             avg = sum(scores) / len(scores)
-            print(f"Game {games_played:>4}  |  Score: {score:>4}  |  Avg: {avg:>6.2f}  |  Best: {max(scores):>4}  |  Speed: {game.speed} FPS")
+            print(f"Game {games_played:>4}  |  Score: {score:>4}  |  Avg: {avg:>6.2f}  |  Best: {max(scores):>4}  |  Speed: {game.speed} FPS  |  Reason: {reason}")
             game.reset()
 
     pygame.quit()

@@ -52,22 +52,34 @@ class SnakeGameLogic:
     def play_step(self, action):
         self.frame_iteration += 1
         game_over = False
+        reason = "None"
 
         self._move(action)
         self.snake.insert(0, self.head)
 
-        if self.is_collision() or self.frame_iteration > 100 * len(self.snake):
+        if self.is_collision():
             game_over = True
+            if self.head.x > self.w - BLOCK_SIZE or self.head.x < 0 or self.head.y > self.h - BLOCK_SIZE or self.head.y < 0:
+                reason = "Wall Collision"
+            else:
+                reason = "Self Collision"
             self.snake.pop()
             length_penalty = -10
-            return length_penalty, game_over, self.score
+            return length_penalty, game_over, self.score, reason
+        
+        if self.frame_iteration > 100 * len(self.snake):
+            game_over = True
+            reason = "Too Many Steps"
+            self.snake.pop()
+            length_penalty = -10
+            return length_penalty, game_over, self.score, reason
 
         if self.head == self.food:
             self.score += 1
             self._place_food()
             self.frame_iteration = 0
             self.last_distance_to_food = self._dist_to_food()
-            return 10, game_over, self.score
+            return 10, game_over, self.score, reason
 
         self.snake.pop()
         reward = -0.1
@@ -78,7 +90,7 @@ class SnakeGameLogic:
             reward += shaping * scale
             self.last_distance_to_food = dist_now
 
-        return reward, game_over, self.score
+        return reward, game_over, self.score, reason
 
     def is_collision(self, pt=None):
         if pt is None:
@@ -142,10 +154,10 @@ class SnakeGameVisual(SnakeGameLogic):
                 pygame.quit()
                 quit()
 
-        reward, game_over, score = super().play_step(action)
+        reward, game_over, score, reason = super().play_step(action)
         self._update_ui()
         self.clock.tick(self.speed)
-        return reward, game_over, score
+        return reward, game_over, score, reason
 
     def _update_ui(self):
         pygame = self.pygame
