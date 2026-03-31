@@ -1,19 +1,41 @@
 import numpy as np
 import torch
 import random
+from collections import deque
 
 
 def _worker_run_episodes(args):
     from game import SnakeGameLogic, Direction, Point
     from model import Linear_QNet
+    from collections import deque
     import torch
 
     weights_numpy, epsilon, n_games, num_episodes = args
 
-    model = Linear_QNet(11, 256, 3)
+    model = Linear_QNet(15, 256, 3)
     state_dict = {k: torch.tensor(v) for k, v in weights_numpy.items()}
     model.load_state_dict(state_dict)
     model.eval()
+
+    def flood_fill_size(game, start_point):
+        visited = set()
+        queue = deque([start_point])
+        body_set = set(game.snake[1:])
+        while queue:
+            pt = queue.popleft()
+            if pt in visited:
+                continue
+            if pt.x < 0 or pt.x >= game.w or pt.y < 0 or pt.y >= game.h:
+                continue
+            if pt in body_set:
+                continue
+            visited.add(pt)
+            queue.append(Point(pt.x + 20, pt.y))
+            queue.append(Point(pt.x - 20, pt.y))
+            queue.append(Point(pt.x, pt.y + 20))
+            queue.append(Point(pt.x, pt.y - 20))
+        total_cells = (game.w // 20) * (game.h // 20)
+        return len(visited) / total_cells
 
     def get_state(game):
         head = game.snake[0]
@@ -48,13 +70,18 @@ def _worker_run_episodes(args):
             game.food.x < game.head.x,
             game.food.x > game.head.x,
             game.food.y < game.head.y,
-            game.food.y > game.head.y
+            game.food.y > game.head.y,
+
+            flood_fill_size(game, point_l),
+            flood_fill_size(game, point_r),
+            flood_fill_size(game, point_u),
+            flood_fill_size(game, point_d),
         ]
-        return np.array(state, dtype=int)
+        return np.array(state, dtype=float)
 
     def get_action(state):
         final_move = [0, 0, 0]
-        if random.randint(0, 200) < (80 - n_games):
+        if random.random() < epsilon:
             move = random.randint(0, 2)
             final_move[move] = 1
         else:
@@ -86,7 +113,7 @@ def _worker_run_episodes(args):
 def run_parallel_episodes(num_envs, n_workers, weights, epsilon, n_games, mp_context):
     episodes_per_worker = [num_envs // n_workers] * n_workers
     for i in range(num_envs % n_workers):
-        episodes_per_worker[i] += 1 
+        episodes_per_worker[i] += 1
 
     args_list = [
         (weights, epsilon, n_games, n_eps)

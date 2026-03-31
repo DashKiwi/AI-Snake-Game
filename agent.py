@@ -21,12 +21,37 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class Agent:
     def __init__(self):
         self.n_games = 0
-        self.epsilon = 0
+        self.epsilon = 1.0
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
         self.gamma = 0.9
         self.memory = deque(maxlen=MAX_MEMORY)
-        self.model = Linear_QNet(11, 256, 3).to(device)
+        self.model = Linear_QNet(15, 256, 3).to(device)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
         self.model_lock = threading.Lock()
+
+    def _flood_fill_size(self, game, start_point):
+        from collections import deque as dq
+        visited = set()
+        queue = dq([start_point])
+        body_set = set(game.snake[1:])
+
+        while queue:
+            pt = queue.popleft()
+            if pt in visited:
+                continue
+            if pt.x < 0 or pt.x >= game.w or pt.y < 0 or pt.y >= game.h:
+                continue
+            if pt in body_set:
+                continue
+            visited.add(pt)
+            queue.append(Point(pt.x + 20, pt.y))
+            queue.append(Point(pt.x - 20, pt.y))
+            queue.append(Point(pt.x, pt.y + 20))
+            queue.append(Point(pt.x, pt.y - 20))
+
+        total_cells = (game.w // 20) * (game.h // 20)
+        return len(visited) / total_cells
 
     def get_state(self, game):
         head = game.snake[0]
@@ -61,20 +86,23 @@ class Agent:
             game.food.x < game.head.x,
             game.food.x > game.head.x,
             game.food.y < game.head.y,
-            game.food.y > game.head.y
+            game.food.y > game.head.y,
+
+            self._flood_fill_size(game, point_l),
+            self._flood_fill_size(game, point_r),
+            self._flood_fill_size(game, point_u),
+            self._flood_fill_size(game, point_d),
         ]
 
-        return np.array(state, dtype=int)
+        return np.array(state, dtype=float)
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
     def train_long_memory(self):
-        if len(self.memory) > BATCH_SIZE:
-            mini_sample = random.sample(self.memory, BATCH_SIZE)
-        else:
-            mini_sample = self.memory
-
+        if len(self.memory) < BATCH_SIZE:
+            return
+        mini_sample = random.sample(self.memory, BATCH_SIZE)
         states, actions, rewards, next_states, dones = zip(*mini_sample)
         with self.model_lock:
             self.trainer.train_step(states, actions, rewards, next_states, dones)
@@ -84,9 +112,9 @@ class Agent:
             self.trainer.train_step(state, action, reward, next_state, done)
 
     def get_action(self, state):
-        self.epsilon = 80 - self.n_games
+        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
         final_move = [0, 0, 0]
-        if random.randint(0, 200) < self.epsilon:
+        if random.random() < self.epsilon:
             move = random.randint(0, 2)
             final_move[move] = 1
         else:
@@ -187,9 +215,11 @@ class VectorizedAgent:
                     for step in experiences:
                         self.agent.remember(*step)
 
-                for score in all_scores:
+                for i, score in enumerate(all_scores):
                     self.agent.n_games += 1
-                    self.agent.train_long_memory()
+
+                    if self.agent.n_games % 4 == 0:
+                        self.agent.train_long_memory()
 
                     if score > self.record:
                         self.record = score

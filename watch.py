@@ -9,6 +9,28 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def get_state(game):
+    from collections import deque
+    
+    def flood_fill_size(start_point):
+        visited = set()
+        queue = deque([start_point])
+        body_set = set(game.snake[1:])
+        while queue:
+            pt = queue.popleft()
+            if pt in visited:
+                continue
+            if pt.x < 0 or pt.x >= game.w or pt.y < 0 or pt.y >= game.h:
+                continue
+            if pt in body_set:
+                continue
+            visited.add(pt)
+            queue.append(Point(pt.x + 20, pt.y))
+            queue.append(Point(pt.x - 20, pt.y))
+            queue.append(Point(pt.x, pt.y + 20))
+            queue.append(Point(pt.x, pt.y - 20))
+        total_cells = (game.w // 20) * (game.h // 20)
+        return len(visited) / total_cells
+
     head = game.snake[0]
     point_l = Point(head.x - 20, head.y)
     point_r = Point(head.x + 20, head.y)
@@ -41,9 +63,14 @@ def get_state(game):
         game.food.x < game.head.x,
         game.food.x > game.head.x,
         game.food.y < game.head.y,
-        game.food.y > game.head.y
+        game.food.y > game.head.y,
+
+        flood_fill_size(point_l),
+        flood_fill_size(point_r),
+        flood_fill_size(point_u),
+        flood_fill_size(point_d),
     ]
-    return np.array(state, dtype=int)
+    return np.array(state, dtype=float)
 
 
 def get_action(model, state):
@@ -57,7 +84,7 @@ def get_action(model, state):
 
 
 def watch(speed=15):
-    model = Linear_QNet(11, 256, 3).to(device)
+    model = Linear_QNet(15, 256, 3).to(device)
     metadata = model.load()
 
     n_games    = metadata.get('n_games', '?')
